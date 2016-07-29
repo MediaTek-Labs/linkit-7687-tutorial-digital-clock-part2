@@ -33,9 +33,6 @@
  */
 
 /* Modify below configuration to fit your enviornment */
-#define AP_SSID "your_SSID"
-#define AP_PWD  "your_pwd"
-
 #define NTP_SERVER1 "time.stdtime.gov.tw"
 #define NTP_SERVER2 "clock.stdtime.gov.tw"
 #define TIMEZONE_OFFSET     8
@@ -58,6 +55,8 @@
 #include "hal.h"
 #include <time.h>
 #include "lcd.h"
+
+ #include "nvdm.h"
 
 #define US2TICK(us) (us/(1000*portTICK_RATE_MS))
 #define MS2TICK(ms) (ms/(portTICK_RATE_MS))
@@ -147,21 +146,84 @@ static void lcd_init(void)
 
 static void main_task(void *args)
 {
+    uint8_t ssid[WIFI_MAX_LENGTH_OF_SSID + 1];
+    uint8_t pwd[WIFI_LENGTH_PASSPHRASE + 1]; 
+    uint32_t ssid_len = WIFI_MAX_LENGTH_OF_SSID;
+    uint32_t pwd_len = WIFI_LENGTH_PASSPHRASE;
+    hal_gpio_data_t gpio0_state;
+
+    /* i2c/lcd init*/
     LOG_I(common, "LCD init");
     lcd_init();
     rgblcd_begin(16, 2);
     LOG_I(common, "LCD init done");
 
-    rgblcd_setRGB(255, 0, 0);
-    rgblcd_setCursor(0, 0);
-    rgblcd_write_str("Connecting AP...");
+    /* check GPIO 0 state */
+    hal_gpio_init(HAL_GPIO_0);
+    hal_pinmux_set_function(HAL_GPIO_0, HAL_GPIO_0_GPIO0);
+    hal_gpio_set_direction(HAL_GPIO_0, HAL_GPIO_DIRECTION_INPUT);
+    hal_gpio_pull_down(HAL_GPIO_0);
+    hal_gpio_get_input(HAL_GPIO_0, &gpio0_state);
+    hal_gpio_deinit(HAL_GPIO_0);
+    LOG_I(common, "gpio 0 state: %d", gpio0_state);
 
-    LOG_I(common, "network init: %s, %s", AP_SSID, AP_PWD);
-    network_init(AP_SSID, AP_PWD);
-    LOG_I(common, "network init done");
+    /* check settings from NVDM */
+    LOG_I(common, "read ssid/pwd from NVDM");
+    nvdm_init();
+    if (gpio0_state == HAL_GPIO_DATA_HIGH ||
+        nvdm_read_data_item("user", "ssid", ssid, &ssid_len) == NVDM_STATUS_ITEM_NOT_FOUND ||
+        nvdm_read_data_item("user", "pwd", pwd, &pwd_len) == NVDM_STATUS_ITEM_NOT_FOUND)
+    {
+        LOG_I(common, "NVDM has no data, do smart connection");
+        // do smart connection
+        rgblcd_setRGB(255, 128, 0);
+        rgblcd_setCursor(0, 0);
+        rgblcd_write_str("Waiting for");
+        rgblcd_setCursor(0, 1);
+        rgblcd_write_str("smart connect...");
+
+        LOG_I(common, "network init");
+        network_init_wo_AP();
+        LOG_I(common, "network init done");
+
+        LOG_I(common, "smart connection start");
+        smart_connect(NULL, ssid, pwd);
+        LOG_I(common, "smart connection done: %s,%s", ssid, pwd);
+
+        rgblcd_clear();
+        rgblcd_setRGB(255, 0, 0);
+        rgblcd_setCursor(0, 0);
+        rgblcd_write_str("Connecting AP:");
+        rgblcd_setCursor(0, 1);
+        rgblcd_write_str(ssid);
+        LOG_I(common, "network update: %s, %s", ssid, pwd);
+        network_update_AP_info(ssid, pwd);
+        LOG_I(common, "network update done");
+
+        nvdm_write_data_item("user", "ssid", NVDM_DATA_ITEM_TYPE_STRING, ssid, strlen(ssid));
+        nvdm_write_data_item("user", "pwd", NVDM_DATA_ITEM_TYPE_STRING, pwd, strlen(pwd));
+    }
+    else
+    {
+        LOG_I(common, "NVDM has data");
+        ssid[ssid_len] = 0;
+        pwd[pwd_len] = 0;
+
+        rgblcd_setRGB(255, 0, 0);
+        rgblcd_setCursor(0, 0);
+        rgblcd_write_str("Connecting AP:");
+        rgblcd_setCursor(0, 1);
+        rgblcd_write_str(ssid);
+
+        LOG_I(common, "network init: %s, %s", ssid, pwd);
+        network_init(ssid, pwd);
+        LOG_I(common, "network init done");
+    }
 
     rgblcd_setRGB(0, 255, 0);
     rgblcd_clear();
+    rgblcd_setCursor(0, 0);
+    rgblcd_write_str("Success!");
 
     //SNTP start.
     sntp_setservername(0, NTP_SERVER1);

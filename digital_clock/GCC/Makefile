@@ -85,6 +85,7 @@ LIBS += $(OUTPATH)/libbspex.a
 LIBS += $(OUTPATH)/liblwip.a
 LIBS += $(OUTPATH)/libhal.a
 LIBS += $(OUTPATH)/libdhcpd.a
+LIBS += $(OUTPATH)/libsmtcn.a
 
 MODULE_PATH += $(KRL_OS_PATH)
 MODULE_PATH += $(MID_LWIP_PATH)
@@ -96,6 +97,7 @@ MODULE_PATH += $(MID_BSPEXT_PATH)
 MODULE_PATH += $(DRV_CHIP_PATH)
 MODULE_PATH += $(KRL_SRV_PATH)
 MODULE_PATH += $(DRV_BSP_PATH)
+MODULE_PATH += $(MID_SMTCN_PATH)
 ###################################################
 # Rules
 .PHONY: proj clean $(MODULE_PATH)

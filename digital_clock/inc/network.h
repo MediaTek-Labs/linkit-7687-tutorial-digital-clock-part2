@@ -33,5 +33,8 @@
  */
 #include <stdio.h>
 
-void network_init(const char*, const char *);
+void network_init(const char* ssid, const char *pwd);
 
+void network_init_wo_AP(void);
+void network_update_AP_info(const char* ssid, const char* pwd);
+void smart_connect(const char* key, char* ssid, char* pwd);

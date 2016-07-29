@@ -48,7 +48,11 @@
 #include "ethernetif.h"
 #include "portmacro.h"
 
+#include "smt_api.h"
+
 static SemaphoreHandle_t ip_ready;
+static SemaphoreHandle_t wifi_inited;
+static SemaphoreHandle_t smtcn_ready;
 
 static void _ip_ready_callback(struct netif *netif)
 {
@@ -79,6 +83,10 @@ static int32_t _wifi_event_handler(wifi_event_t event,
 
     switch(event)
     {
+    case WIFI_EVENT_IOT_INIT_COMPLETE:
+        xSemaphoreGive(wifi_inited);
+        LOG_I(common, "wifi inited");
+        break;
     case WIFI_EVENT_IOT_PORT_SECURE:
         sta_if = netif_find_by_type(NETIF_TYPE_STA);
         netif_set_link_up(sta_if);
@@ -112,6 +120,8 @@ void network_init(const char* SSID, const char* password)
     strcpy((char *)wifi_config.sta_config.password, password);
     wifi_config.sta_config.password_length = strlen(password);
 
+    wifi_inited = xSemaphoreCreateBinary();
+
     wifi_init(&wifi_config, NULL);
     lwip_tcpip_init(&tcpip_config, WIFI_MODE_STA_ONLY);
 
@@ -125,3 +135,76 @@ void network_init(const char* SSID, const char* password)
     xSemaphoreTake(ip_ready, portMAX_DELAY);
 }
 
+void network_init_wo_AP(void)
+{
+    struct netif *sta_if;
+
+    wifi_config_t wifi_config = {0};
+    lwip_tcpip_config_t tcpip_config = {{0}, {0}, {0}, {0}, {0}, {0}};
+
+    wifi_connection_register_event_handler(WIFI_EVENT_IOT_INIT_COMPLETE , _wifi_event_handler);
+    wifi_connection_register_event_handler(WIFI_EVENT_IOT_CONNECTED, _wifi_event_handler);
+    wifi_connection_register_event_handler(WIFI_EVENT_IOT_PORT_SECURE, _wifi_event_handler);
+    wifi_connection_register_event_handler(WIFI_EVENT_IOT_DISCONNECTED, _wifi_event_handler);
+
+    wifi_config.opmode = WIFI_MODE_STA_ONLY;
+
+    wifi_inited = xSemaphoreCreateBinary();
+
+    wifi_init(&wifi_config, NULL);
+    lwip_tcpip_init(&tcpip_config, WIFI_MODE_STA_ONLY);
+
+    ip_ready = xSemaphoreCreateBinary();
+
+    sta_if = netif_find_by_type(NETIF_TYPE_STA);
+    netif_set_status_callback(sta_if, _ip_ready_callback);
+    dhcp_start(sta_if);
+
+    // wait for result
+    xSemaphoreTake(wifi_inited, portMAX_DELAY);
+}
+
+void network_update_AP_info(const char* ssid, const char* pwd)
+{
+    wifi_config_set_ssid(WIFI_PORT_STA, ssid, strlen(ssid));
+    wifi_config_set_wpa_psk_key(WIFI_PORT_STA, pwd, strlen(pwd));
+    wifi_config_reload_setting();
+
+    // wait for result
+    xSemaphoreTake(ip_ready, portMAX_DELAY);
+}
+
+static void _smtcn_handler(wifi_smart_connection_event_t event, void *data)
+{
+    switch (event)
+    {
+        case WIFI_SMART_CONNECTION_EVENT_CHANNEL_LOCKED:
+            break;
+
+        case WIFI_SMART_CONNECTION_EVENT_TIMEOUT:
+            LOG_E(common, "Smart connection failed - timeout");
+            break;
+        case WIFI_SMART_CONNECTION_EVENT_INFO_COLLECTED:
+            xSemaphoreGive(smtcn_ready);
+            wifi_smart_connection_deinit();
+            break;
+    }
+}
+
+void smart_connect(const char* key, char* ssid, char* pwd)
+{
+    uint8_t ssid_len = 0;
+    uint8_t pwd_len = 0;
+
+    smtcn_ready = xSemaphoreCreateBinary();
+
+    wifi_smart_connection_init(key, key ? strlen(key) : 0, _smtcn_handler);
+    wifi_smart_connection_start(0);
+
+    // wait for result
+    xSemaphoreTake(smtcn_ready, portMAX_DELAY);
+
+    wifi_smart_connection_get_result(ssid, &ssid_len, pwd, &pwd_len, NULL, NULL);
+    ssid[ssid_len] = 0;
+    pwd[pwd_len] = 0;
+}

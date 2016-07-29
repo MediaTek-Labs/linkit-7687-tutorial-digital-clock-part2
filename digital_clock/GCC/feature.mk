@@ -10,3 +10,4 @@ MTK_MAIN_CONSOLE_UART2_ENABLE       = n
 MTK_BSP_LOOPBACK_ENABLE             = n
 MTK_OS_CPU_UTILIZATION_ENABLE       = n
 MTK_MBEDTLS_CONFIG_FILE             = config-mtk-basic.h
+MTK_SMTCN_ENABLE                    = y
