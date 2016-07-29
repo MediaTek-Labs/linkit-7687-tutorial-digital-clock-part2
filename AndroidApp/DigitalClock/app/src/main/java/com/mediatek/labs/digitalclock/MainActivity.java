@@ -11,6 +11,9 @@ import android.view.MenuItem;
 
 public class MainActivity extends AppCompatActivity {
 
+    private boolean m_state;
+    private String m_customData = "";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -18,12 +21,26 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        elianInitSmartConnection();
+        m_state = false;
+
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+                if(!m_state) {
+                    elianStartSmartConnection(m_ssid, m_pwd, m_customData);
+                    m_state = true;
+                    Snackbar.make(view, "Start Smart connection", Snackbar.LENGTH_LONG)
+                            .setAction("Action", null).show();
+                }
+                else
+                {
+                    elianStopSmartConnection();
+                    m_state = false;
+                    Snackbar.make(view, "Stop Smart connection", Snackbar.LENGTH_LONG)
+                            .setAction("Action", null).show();
+                }
             }
         });
     }
@@ -49,4 +66,11 @@ public class MainActivity extends AppCompatActivity {
 
         return super.onOptionsItemSelected(item);
     }
+
+    static {
+        System.loadLibrary("elian-wrapper-jni");
+    }
+    public native void elianInitSmartConnection();
+    public native void elianStartSmartConnection(String SSID, String password, String customData);
+    public native void elianStopSmartConnection();
 }
