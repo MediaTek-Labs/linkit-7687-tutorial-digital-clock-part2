@@ -12,6 +12,8 @@ import android.view.MenuItem;
 public class MainActivity extends AppCompatActivity {
 
     private boolean m_state;
+    private String m_ssid = "your_SSID";
+    private String m_pwd = "your_pwd";
     private String m_customData = "";
 
     @Override
